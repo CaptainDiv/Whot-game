@@ -2,6 +2,8 @@
 module whot::whot;
 
 const EAlreadyFull: u64 = 0;
+const ENotEnoughPlayers: u64 = 1;
+const EGameOver: u64 = 2;
 
 /// A single game of Whot.
 /// The game is played by at least 2 players, so we use the shared state.
@@ -9,6 +11,9 @@ public struct Whot has key {
     id: UID,
     deck: vector<Card>,
     players: vector<Player>,
+    discard_pile: vector<Card>,
+    current_turn: address,
+    winner: option::Option<address>,
 }
 
 /// A player in the game.
@@ -69,6 +74,43 @@ fun new_deck(): vector<Card> {
     1u8.range_do!(9, |num| if (num != 6) deck.push_back(Card::Star(num)));
     deck
 }
+
+public fun start_game(game: &mut Whot, ctx: &mut Txcontext) {
+    assert!(game.players.length() >= 2, ENotEnoughPlayers);
+
+    let first_card = vector::pop_back(&mut game.deck);
+    game.discard_pile.push_back(first_card);
+
+    game.current_turn = 0;
+
+    game.winner = option::none<address>();
+}
+
+public fun play_card(game: &mut Whot, player_index: u64, card_index: u64, ctx: &mut TxContext) {
+    assert!(option::is_none(&game.winner), EGameOver);
+
+    assert!(player_index == game.current_turn, ENotYourTurn);
+
+    let player = &mut game.players[players_index];
+
+    let played_card = vector::remove(&mut player.hand, card_index);
+
+    let top_card = vector::borrow(&game.discard_pile, game.discard_pile.length() - 1);
+
+    assert!(valid_move(&played_card, top_card), EInvalidCard);
+
+    game.discard_pile.push_back(played_card);
+
+    // Check if this player has won
+    if (player.hand.length() == 0) {
+        game.winner = option::some(ctx.sender());
+        return;
+    }
+
+    // Move the turn to the next player
+    game.current_turn = (game.current_turn + 1) % game.players.length();
+}
+
 
 #[test]
 fun test_new_deck() {
